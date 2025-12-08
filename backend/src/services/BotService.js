@@ -1,47 +1,113 @@
-// src/services/BotService.js
+// server/src/services/BotService.js
 const fs = require('fs');
+const pdf = require('pdf-parse');
+const natural = require('natural');
 const DocumentModel = require('../models/DocumentModel');
 
-const analyzeDocument = (docId, filePath) => {
-    console.log(`🤖 Service: analyzing doc ${docId}...`);
+// --- 1. THE AGENT'S BRAIN (NLP Classifier) ---
+// We create a Bayesian Classifier. It learns by associating words with categories.
+const classifier = new natural.BayesClassifier();
 
-    fs.readFile(filePath, 'utf8', (err, data) => {
-        if (err) return console.error("Read Error:", err);
+// We "Teach" the agent some basic concepts on startup
+const trainAgent = () => {
+    console.log("🧠 Agent: Loading knowledge base...");
+    
+    // Teach it what an Invoice looks like
+    classifier.addDocument('invoice bill total amount due payment tax vat', 'INVOICE');
+    classifier.addDocument('payment received purchase order cost fee', 'INVOICE');
+    
+    // Teach it what a Receipt (like REWE/Supermarket) looks like
+    classifier.addDocument('market store receipt cash change card total rewe aldi lidl', 'RECEIPT');
+    classifier.addDocument('thank you for shopping visit again', 'RECEIPT');
 
-        const content = data.toLowerCase();
-        let result = { summary: "Unknown Document", amount: 0, confidence: "0%" };
-        let newStatus = 'REVIEW_NEEDED';
+    // Teach it what a Resume/CV looks like
+    classifier.addDocument('resume cv experience education skills references profile worked', 'RESUME');
+    classifier.addDocument('university bachelor master graduated email phone', 'RESUME');
 
-        // 1. LOGIC ENGINE
-        if (content.includes('invoice') || content.includes('bill')) {
-            result.summary = "Invoice Detected";
-            result.confidence = "95%";
-            
-            // Extract Amount Regex
-            const amountMatch = data.match(/\$?\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
-            if (amountMatch) {
-                const amount = parseFloat(amountMatch[1].replace(',', ''));
-                result.amount = amount;
-                
-                // Business Rule: Auto-Approve small amounts
-                newStatus = amount < 500 ? 'AUTO_APPROVED' : 'REQUIRES_APPROVAL';
-            }
-        } 
-        else if (content.includes('contract') || content.includes('agreement')) {
-            result.summary = "Legal Agreement";
-            result.confidence = "88%";
-            newStatus = 'PENDING_LEGAL';
+    classifier.train();
+    console.log("🧠 Agent: Training complete.");
+};
+
+// Train immediately when this file is loaded
+trainAgent();
+
+// --- 2. THE AGENT'S EYES (Text Extractor) ---
+const extractText = async (filePath) => {
+    const buffer = fs.readFileSync(filePath);
+
+    // If it is a PDF, use the PDF Parser
+    if (filePath.toLowerCase().endsWith('.pdf')) {
+        try {
+            const data = await pdf(buffer);
+            return data.text; // Return the extracted text
+        } catch (err) {
+            console.error("PDF Parse Error:", err);
+            return "";
+        }
+    } 
+    // If it is a Text file, read as string
+    else {
+        return buffer.toString('utf8');
+    }
+};
+
+// --- 3. THE ANALYSIS PROCESS ---
+const analyzeDocument = async (docId, filePath) => {
+    console.log(`🤖 Agent: Reading document ${docId}...`);
+
+    try {
+        // Step A: Extract Text (See)
+        const rawText = await extractText(filePath);
+        const cleanText = rawText.toLowerCase(); // Normalization
+        
+        // Step B: Classify (Think)
+        // The classifier looks at the text and guesses the category
+        const category = classifier.classify(cleanText); 
+        
+        console.log(`🧠 Agent: I think this is a ${category}`);
+
+        // Step C: Extract Data (Act)
+        let extractedAmount = 0;
+        let finalStatus = 'REVIEW_NEEDED';
+
+        // Attempt to find money (Regex for $ or €)
+        // Matches: $500, 500.00, 500,00 EUR
+        const amountMatch = rawText.match(/[\€\$]?\s?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)/);
+        
+        if (amountMatch) {
+            // Cleanup price string (replace ',' with '.' for JS math)
+            let priceString = amountMatch[1].replace(',', '.');
+            extractedAmount = parseFloat(priceString);
         }
 
-        // 2. DELAY SIMULATION & DB UPDATE
+        // Logic based on AI Category
+        if (category === 'INVOICE') {
+            finalStatus = extractedAmount < 20 ? 'AUTO_APPROVED' : 'REQUIRES_APPROVAL';
+        } 
+        else if (category === 'RECEIPT') {
+            finalStatus = 'AUTO_APPROVED'; // Receipts are usually small expenses
+        }
+        else if (category === 'RESUME') {
+            finalStatus = 'ARCHIVED_HR'; // Send to HR
+            extractedAmount = 0; // Resumes don't have monetary value
+        }
+
+        // Step D: Update Database
         setTimeout(() => {
             DocumentModel.update(docId, {
-                status: newStatus,
-                data: result
+                status: finalStatus,
+                data: {
+                    summary: `${category} Detected`, // e.g., "RECEIPT Detected"
+                    amount: extractedAmount,
+                    confidence: "High (AI)"
+                }
             });
-            console.log(`✅ Service: Doc ${docId} updated to ${newStatus}`);
-        }, 3000);
-    });
+            console.log(`✅ Agent: Finished doc ${docId}`);
+        }, 2000);
+
+    } catch (err) {
+        console.error("Analysis Failed:", err);
+    }
 };
 
 module.exports = { analyzeDocument };
