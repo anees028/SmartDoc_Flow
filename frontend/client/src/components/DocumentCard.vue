@@ -1,7 +1,11 @@
 <script setup>
 defineProps({
-  doc: Object // Receives a single document object
+  doc: Object
 });
+
+const formatStatus = (status) => {
+  return status.replace('_', ' ');
+};
 </script>
 
 <template>
@@ -17,24 +21,30 @@ defineProps({
     <div class="card-content">
       <div v-if="doc.status === 'PROCESSING'" class="status-processing">
           <div class="spinner"></div>
-          <span>AI Analyzing...</span>
+          <span>Counting Words...</span>
       </div>
       
       <div v-else class="status-completed">
         <div class="data-point">
-          <label>Summary</label>
+          <label>Analysis Type</label>
           <strong>{{ doc.data.summary }}</strong>
         </div>
+        
         <div class="data-point">
-          <label>Amount</label>
-          <strong class="highlight-green">${{ doc.data.amount }}</strong>
+          <label>Word Count</label>
+          <strong class="highlight-blue">{{ doc.data.amount }} words</strong>
+        </div>
+
+        <div class="data-point">
+          <label>Method</label>
+          <span class="confidence-tag">{{ doc.data.confidence }}</span>
         </div>
       </div>
     </div>
 
     <div class="card-footer">
       <span :class="['status-pill', doc.status.toLowerCase()]">
-        {{ doc.status === 'COMPLETED' ? 'Done' : 'Processing' }}
+        {{ formatStatus(doc.status) }}
       </span>
       <span class="id-tag">#{{ doc.id.slice(-4) }}</span>
     </div>
@@ -42,29 +52,27 @@ defineProps({
 </template>
 
 <style scoped>
+/* Keep your existing styles the same, just changed 'highlight-green' to blue for better semantics */
 .doc-card { background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s; height: 100%; }
 .doc-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
-
 .card-top { display: flex; gap: 12px; margin-bottom: 16px; }
 .icon-box { background: #f1f5f9; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 1.2rem; }
 .meta { display: flex; flex-direction: column; overflow: hidden; }
 .filename { font-weight: 600; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .time { font-size: 0.75rem; color: #94a3b8; }
-
 .card-content { flex: 1; background: #f8fafc; border-radius: 6px; padding: 12px; margin-bottom: 16px; min-height: 80px; display: flex; align-items: center; justify-content: center; }
-
 .status-processing { color: #d97706; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 500; }
 .spinner { width: 16px; height: 16px; border: 2px solid #fcd34d; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
 .status-completed { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .data-point { display: flex; justify-content: space-between; font-size: 0.9rem; }
 .data-point label { color: #64748b; }
-.highlight-green { color: #16a34a; }
-
+.highlight-blue { color: #2563eb; font-weight: 700; } /* New Color for count */
+.confidence-tag { background: #e0f2fe; color: #0284c7; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
 .card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; }
+.id-tag { color: #cbd5e1; font-family: monospace; }
 .status-pill { padding: 4px 10px; border-radius: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem; }
 .status-pill.processing { background: #fffbeb; color: #b45309; }
-.status-pill.completed { background: #dcfce7; color: #166534; }
-.id-tag { color: #cbd5e1; font-family: monospace; }
+.status-pill.auto_approved { background: #dcfce7; color: #166534; } 
+.status-pill.review_needed { background: #fee2e2; color: #991b1b; } 
 </style>
